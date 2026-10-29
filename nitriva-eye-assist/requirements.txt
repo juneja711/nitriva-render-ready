@@ -1,0 +1,9 @@
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+websockets==17.3
+# MediaPipe requires this OpenCV distribution. Installing headless alongside
+# it would put two different wheels in the same cv2 package directory.
+opencv-contrib-python==5.0.0.93
+mediapipe==1.2.0
+numpy==2.4.6
+pydantic==2.14.2

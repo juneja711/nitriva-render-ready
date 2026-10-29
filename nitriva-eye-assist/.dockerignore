@@ -1,0 +1,9 @@
+.git
+.venv
+__pycache__
+*.pyc
+.env
+.env.*
+.pytest_cache
+tests
+scratch_test_calib.json

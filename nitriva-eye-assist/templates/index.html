@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nitriva — Python AI/ML Assistive Interface</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.9); opacity: 0.8; }
+      50% { transform: scale(1.3); opacity: 0.4; }
+      100% { transform: scale(0.9); opacity: 0.8; }
+    }
+    .calib-pulse { animation: pulse-ring 1.2s infinite ease-in-out; }
+  </style>
+</head>
+<body class="bg-[#F8FAFC] text-slate-900 h-screen w-screen flex overflow-hidden select-none relative">
+
+  <!-- ========================================================= -->
+  <!-- FULLSCREEN DUAL-PHASE CALIBRATION OVERLAY -->
+  <!-- ========================================================= -->
+  <div id="calibration-overlay" class="fixed inset-0 z-[2000] flex flex-col items-center justify-center transition-colors duration-700 select-none bg-white">
+    <!-- Face Lost Alert -->
+    <div id="calib-error-banner" class="hidden absolute top-10 left-1/2 -translate-x-1/2 bg-rose-600 text-white px-6 py-3 rounded-2xl font-bold shadow-2xl flex items-center gap-3 animate-bounce z-50">
+      <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+      <span id="calib-error-text">Face Lost! Align face in camera.</span>
+    </div>
+
+    <!-- SETUP CARD (Initial prompt) -->
+    <div id="calib-setup-card" class="w-full max-w-lg text-center p-12 bg-white/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl border border-slate-100 flex flex-col items-center relative text-slate-900">
+      <div class="w-20 h-20 bg-emerald-50 rounded-3xl flex items-center justify-center text-emerald-600 mb-6 shadow-inner">
+        <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+      </div>
+      <h2 class="text-3xl font-extrabold tracking-tight mb-3">Optics Calibration</h2>
+      <p class="text-slate-500 font-medium text-base mb-8 leading-relaxed">
+        Nitriva uses AI computer vision to track your gaze. Please center your face in the camera and follow the green target dots.
+      </p>
+      <div class="flex flex-col w-full gap-3">
+        <button onclick="startCalibration()" class="w-full py-4 bg-emerald-600 text-white rounded-2xl font-extrabold text-lg hover:bg-emerald-700 active:scale-[0.98] transition-all shadow-xl shadow-emerald-600/25">
+          Start Calibration
+        </button>
+        <button onclick="skipCalibration()" class="w-full py-3 text-slate-500 hover:text-slate-800 font-bold text-sm transition">
+          Skip (Use Default Tracking)
+        </button>
+      </div>
+    </div>
+
+    <!-- ACTIVE CALIBRATION DOT -->
+    <div id="calib-target" class="hidden absolute transition-all duration-500 -translate-x-1/2 -translate-y-1/2" style="top: 50%; left: 50%;">
+      <div class="w-12 h-12 rounded-full bg-emerald-500 shadow-[0_0_40px_#10B981] border-4 border-white calib-pulse"></div>
+    </div>
+
+    <!-- ACTIVE CALIBRATION TEXT (Look Bottom Right...) -->
+    <p id="calib-instruction" class="hidden absolute bottom-16 w-full text-center text-3xl font-extrabold tracking-tight text-slate-800">
+      1. LOOK AT CENTER <span id="calib-phase-pill" class="text-emerald-500 font-mono text-xl">(Phase: Light Mode)</span>
+    </p>
+  </div>
+  
+  <!-- Left Sidebar -->
+  <aside class="w-[320px] bg-white border-r border-slate-100 p-6 flex flex-col justify-between z-20 shadow-[4px_0_24px_rgba(0,0,0,0.02)] h-full shrink-0">
+    <div>
+      <!-- Brand -->
+      <div class="flex items-center gap-3 mb-8 cursor-pointer" onclick="setRoute('/dashboard')">
+        <div class="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center shadow-md">
+          <div class="w-4 h-4 bg-emerald-400 rounded-full shadow-[0_0_8px_#34d399]"></div>
+        </div>
+        <div>
+          <h1 class="text-2xl font-extrabold tracking-tight text-slate-900">Nitriva</h1>
+          <span class="text-[10px] font-bold text-emerald-600 uppercase tracking-wider bg-emerald-50 px-2 py-0.5 rounded">Python AI Core</span>
+        </div>
+      </div>
+
+      <!-- Navigation -->
+      <nav class="space-y-2">
+        <button id="nav-dash" onclick="setRoute('/dashboard')" class="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold text-sm transition-all duration-200 bg-slate-900 text-white shadow-lg shadow-slate-900/10">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+          <span>Dashboard</span>
+        </button>
+        <button id="nav-comm" onclick="setRoute('/communication')" class="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold text-sm transition-all duration-200 text-slate-500 hover:bg-slate-50 hover:text-slate-900">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+          <span>Communication</span>
+        </button>
+        <button id="nav-ctrl" onclick="setRoute('/control')" class="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold text-sm transition-all duration-200 text-slate-500 hover:bg-slate-50 hover:text-slate-900">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          <span>Device Control</span>
+        </button>
+        <button onclick="startCalibration()" class="w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-xs text-emerald-600 bg-emerald-50 hover:bg-emerald-100 transition mt-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          <span>Recalibrate Optics</span>
+        </button>
+      </nav>
+    </div>
+
+    <!-- Bottom: Live Python OpenCV Video Stream -->
+    <div class="bg-[#0F172A] rounded-2xl p-4 flex flex-col gap-3 shadow-[0_10px_30px_rgba(0,0,0,0.15)] mt-auto">
+      <div class="flex items-center justify-between px-1">
+        <div class="flex items-center gap-2">
+          <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          <h3 class="text-white font-extrabold text-sm tracking-wide">Python OpenCV Sensor</h3>
+        </div>
+        <span class="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800">MediaPipe</span>
+      </div>
+
+      <!-- Live MJPEG Stream from Python /video_feed -->
+      <div class="w-full aspect-video bg-black rounded-xl overflow-hidden border border-slate-700/50 relative shadow-inner">
+        <img src="/video_feed" alt="Live Computer Vision Feed" class="w-full h-full object-cover" onerror="this.src='/favicon.svg'" />
+      </div>
+
+      <!-- Telemetry Status Pill -->
+      <div class="bg-[#1E293B] rounded-xl px-4 py-2.5 border border-slate-700 flex items-center justify-between">
+        <div class="flex items-center gap-2.5 overflow-hidden">
+          <div id="status-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></div>
+          <span id="gesture-text" class="text-slate-200 font-mono text-xs font-bold truncate">TRACKING GAZE...</span>
+        </div>
+        <span id="coords-text" class="text-[10px] font-mono text-slate-400 shrink-0">X:0.5 Y:0.5</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main View Area -->
+  <main class="flex-1 overflow-y-auto p-8 lg:p-12 flex flex-col">
+    <!-- View: Dashboard -->
+    <div id="view-dashboard" class="h-full flex flex-col w-full max-w-5xl mx-auto">
+      <header class="mb-6 flex justify-between items-end pb-2">
+        <div>
+          <h1 class="text-3xl font-extrabold tracking-tight text-slate-900 mb-1">Modules</h1>
+          <p class="text-base font-medium text-slate-500">Focus gaze and wink left eye to launch</p>
+        </div>
+        <div class="flex gap-2">
+          <span class="px-3 py-1.5 bg-white border border-slate-200 text-xs font-bold rounded-lg text-slate-600 shadow-sm">2 Blinks = Back</span>
+          <span class="px-3 py-1.5 bg-rose-50 border border-rose-100 text-xs font-bold rounded-lg text-rose-600 shadow-sm">3 Blinks = Logout</span>
+        </div>
+      </header>
+
+      <div class="flex-1 grid grid-cols-2 grid-rows-2 gap-6 pb-4">
+        <!-- Module 0: Speech Generator -->
+        <div onclick="setRoute('/communication')" id="card-0" class="dash-card bg-white border-2 border-slate-100 rounded-[2rem] p-8 flex flex-col justify-center cursor-pointer transition-all duration-300 hover:border-orange-200 shadow-sm">
+          <div class="w-14 h-14 rounded-2xl bg-amber-500 text-white flex items-center justify-center mb-5 shadow-lg shadow-amber-500/20">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+          </div>
+          <h2 class="text-2xl font-extrabold text-slate-900 mb-1">Speech Generator</h2>
+          <p class="text-sm font-medium text-slate-500">Communication board & AI voice synthesis</p>
+        </div>
+
+        <!-- Module 1: Device Control -->
+        <div onclick="setRoute('/control')" id="card-1" class="dash-card bg-white border-2 border-slate-100 rounded-[2rem] p-8 flex flex-col justify-center cursor-pointer transition-all duration-300 hover:border-blue-200 shadow-sm">
+          <div class="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center mb-5 shadow-lg shadow-blue-500/20">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          </div>
+          <h2 class="text-2xl font-extrabold text-slate-900 mb-1">Device Control</h2>
+          <p class="text-sm font-medium text-slate-500">Smart home appliances automation</p>
+        </div>
+
+        <!-- Module 2: Emergency SOS -->
+        <div onclick="triggerSOS()" id="card-2" class="dash-card bg-white border-2 border-slate-100 rounded-[2rem] p-8 flex flex-col justify-center cursor-pointer transition-all duration-300 hover:border-rose-200 shadow-sm">
+          <div class="w-14 h-14 rounded-2xl bg-rose-600 text-white flex items-center justify-center mb-5 shadow-lg shadow-rose-500/20">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          </div>
+          <h2 class="text-2xl font-extrabold text-slate-900 mb-1">Emergency SOS</h2>
+          <p class="text-sm font-medium text-slate-500">Trigger instant care alert & siren</p>
+        </div>
+
+        <!-- Module 3: System Prefs -->
+        <div onclick="startCalibration()" id="card-3" class="dash-card bg-white border-2 border-slate-100 rounded-[2rem] p-8 flex flex-col justify-center cursor-pointer transition-all duration-300 hover:border-slate-300 shadow-sm">
+          <div class="w-14 h-14 rounded-2xl bg-slate-800 text-white flex items-center justify-center mb-5 shadow-lg shadow-slate-800/20">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          </div>
+          <h2 class="text-2xl font-extrabold text-slate-900 mb-1">Recalibrate Optics</h2>
+          <p class="text-sm font-medium text-slate-500">Run 5-point Light & Dark calibration</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- View: Communication Board -->
+    <div id="view-communication" class="hidden h-full flex flex-col w-full max-w-7xl mx-auto">
+      <header class="mb-4">
+        <h1 class="text-3xl font-extrabold tracking-tight text-slate-900 mb-1">Communication Board</h1>
+        <p class="text-base font-medium text-slate-500">Wink to select keywords. Python AI will generate a contextual sentence.</p>
+        <div id="sentence-banner" class="mt-4 p-6 rounded-2xl bg-slate-900 text-white font-semibold text-2xl flex items-center justify-between shadow-lg">
+          <span id="current-sentence">Select keywords to speak...</span>
+          <div id="selected-chips" class="flex gap-2"></div>
+        </div>
+      </header>
+      <div class="flex-1 grid grid-cols-4 grid-rows-2 gap-4 pb-4">
+        <button onclick="toggleWord('Water')" class="comm-btn bg-white border-2 border-slate-200 rounded-2xl p-4 font-bold text-xl hover:border-emerald-500 flex flex-col items-center justify-center gap-2">💧 Water</button>
+        <button onclick="toggleWord('Pain')" class="comm-btn bg-white border-2 border-slate-200 rounded-2xl p-4 font-bold text-xl hover:border-emerald-500 flex flex-col items-center justify-center gap-2">⚡ Pain</button>
+        <button onclick="toggleWord('Washroom')" class="comm-btn bg-white border-2 border-slate-200 rounded-2xl p-4 font-bold text-xl hover:border-emerald-500 flex flex-col items-center justify-center gap-2">🚻 Washroom</button>
+        <button onclick="toggleWord('Family')" class="comm-btn bg-white border-2 border-slate-200 rounded-2xl p-4 font-bold text-xl hover:border-emerald-500 flex flex-col items-center justify-center gap-2">👥 Family</button>
+        <button onclick="toggleWord('Hungry')" class="comm-btn bg-white border-2 border-slate-200 rounded-2xl p-4 font-bold text-xl hover:border-emerald-500 flex flex-col items-center justify-center gap-2">🍲 Hungry</button>
+        <button onclick="toggleWord('Cold')" class="comm-btn bg-white border-2 border-slate-200 rounded-2xl p-4 font-bold text-xl hover:border-emerald-500 flex flex-col items-center justify-center gap-2">❄️ Cold</button>
+        <button onclick="toggleWord('Doctor')" class="comm-btn bg-white border-2 border-slate-200 rounded-2xl p-4 font-bold text-xl hover:border-emerald-500 flex flex-col items-center justify-center gap-2">🩺 Doctor</button>
+        <button onclick="clearWords()" class="comm-btn bg-rose-50 border-2 border-rose-200 text-rose-700 rounded-2xl p-4 font-bold text-xl hover:border-rose-400 flex flex-col items-center justify-center gap-2">↩️ CLEAR / BACK</button>
+      </div>
+    </div>
+
+    <!-- View: Device Control -->
+    <div id="view-control" class="hidden h-full flex flex-col w-full max-w-5xl mx-auto">
+      <header class="mb-6">
+        <h1 class="text-3xl font-extrabold tracking-tight text-slate-900 mb-1">Device Control</h1>
+        <p class="text-base font-medium text-slate-500">Wink left eye to interact with appliances & apps</p>
+      </header>
+      <div class="flex-1 grid grid-cols-2 grid-rows-2 gap-6 pb-4">
+        <div onclick="toggleDevice('light')" id="dev-light" class="bg-white border-2 border-slate-200 rounded-3xl p-8 flex flex-col justify-between cursor-pointer hover:border-yellow-400">
+          <div class="w-14 h-14 bg-yellow-100 text-yellow-600 rounded-2xl flex items-center justify-center font-bold text-2xl">💡</div>
+          <div><h2 class="text-2xl font-extrabold text-slate-900">Smart Light</h2><span id="light-status" class="text-xs font-bold text-slate-400">OFFLINE</span></div>
+        </div>
+        <div onclick="toggleDevice('ac')" id="dev-ac" class="bg-white border-2 border-slate-200 rounded-3xl p-8 flex flex-col justify-between cursor-pointer hover:border-blue-400">
+          <div class="w-14 h-14 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center font-bold text-2xl">❄️</div>
+          <div><h2 class="text-2xl font-extrabold text-slate-900">Smart AC</h2><span id="ac-status" class="text-xs font-bold text-slate-400">OFFLINE</span></div>
+        </div>
+        <div onclick="toggleDevice('tv')" id="dev-tv" class="bg-white border-2 border-slate-200 rounded-3xl p-8 flex flex-col justify-between cursor-pointer hover:border-purple-400">
+          <div class="w-14 h-14 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center font-bold text-2xl">📺</div>
+          <div><h2 class="text-2xl font-extrabold text-slate-900">Smart TV</h2><span id="tv-status" class="text-xs font-bold text-slate-400">OFFLINE</span></div>
+        </div>
+        <div onclick="setRoute('/dashboard')" class="bg-slate-50 border-2 border-slate-200 rounded-3xl p-8 flex flex-col justify-between cursor-pointer hover:border-slate-400">
+          <div class="w-14 h-14 bg-slate-200 text-slate-600 rounded-2xl flex items-center justify-center font-bold text-2xl">⬅️</div>
+          <div><h2 class="text-2xl font-extrabold text-slate-800">Return</h2><span class="text-xs font-bold text-slate-400">Back to Dashboard</span></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let currentRoute = '/dashboard';
+    let selectedWords = [];
+
+    function setRoute(route) {
+      currentRoute = route;
+      document.getElementById('view-dashboard').classList.toggle('hidden', route !== '/dashboard');
+      document.getElementById('view-communication').classList.toggle('hidden', route !== '/communication');
+      document.getElementById('view-control').classList.toggle('hidden', route !== '/control');
+
+      document.getElementById('nav-dash').className = route === '/dashboard' ? 'w-full flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold text-sm bg-slate-900 text-white shadow-lg' : 'w-full flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold text-sm text-slate-500 hover:bg-slate-50';
+      document.getElementById('nav-comm').className = route === '/communication' ? 'w-full flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold text-sm bg-slate-900 text-white shadow-lg' : 'w-full flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold text-sm text-slate-500 hover:bg-slate-50';
+      document.getElementById('nav-ctrl').className = route === '/control' ? 'w-full flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold text-sm bg-slate-900 text-white shadow-lg' : 'w-full flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold text-sm text-slate-500 hover:bg-slate-50';
+    }
+
+    async function startCalibration() {
+      await fetch('/api/start_calibration', { method: 'POST' });
+    }
+
+    async function skipCalibration() {
+      await fetch('/api/skip_calibration', { method: 'POST' });
+    }
+
+    async function toggleWord(word) {
+      if (selectedWords.includes(word)) {
+        selectedWords = selectedWords.filter(w => w !== word);
+      } else {
+        selectedWords.push(word);
+      }
+      renderWords();
+      if (selectedWords.length > 0) {
+        const res = await fetch('/api/synthesize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keywords: selectedWords })
+        });
+        const data = await res.json();
+        document.getElementById('current-sentence').textContent = data.sentence;
+      }
+    }
+
+    function clearWords() {
+      if (selectedWords.length > 0) {
+        selectedWords = [];
+        renderWords();
+        document.getElementById('current-sentence').textContent = 'Selections cleared.';
+      } else {
+        setRoute('/dashboard');
+      }
+    }
+
+    function renderWords() {
+      const container = document.getElementById('selected-chips');
+      container.innerHTML = selectedWords.map(w => `<span class="bg-slate-800 border border-slate-600 text-emerald-400 px-3 py-1 rounded-lg text-sm font-bold">${w}</span>`).join('');
+    }
+
+    async function toggleDevice(dev) {
+      const res = await fetch('/api/toggle_device', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device: dev })
+      });
+      const data = await res.json();
+      document.getElementById(`${dev}-status`).textContent = data[dev] ? 'ONLINE & ACTIVE' : 'OFFLINE';
+      document.getElementById(`${dev}-status`).className = data[dev] ? 'text-xs font-bold text-emerald-600' : 'text-xs font-bold text-slate-400';
+    }
+
+    function triggerSOS() {
+      fetch('/api/speak', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'Emergency SOS Triggered. Notifying caregiver immediately.' })
+      });
+      alert('EMERGENCY SOS DISPATCHED TO CAREGIVER');
+    }
+
+    // Live AI Telemetry & Calibration Polling from Python Backend
+    setInterval(async () => {
+      try {
+        const res = await fetch('/api/telemetry');
+        const tel = await res.json();
+
+        // Update telemetry pills
+        document.getElementById('gesture-text').textContent = tel.active_gesture || 'TRACKING GAZE...';
+        document.getElementById('coords-text').textContent = `X:${tel.screen_x.toFixed(2)} Y:${tel.screen_y.toFixed(2)}`;
+
+        // Calibration overlay state machine
+        const overlay = document.getElementById('calibration-overlay');
+        const setupCard = document.getElementById('calib-setup-card');
+        const targetDot = document.getElementById('calib-target');
+        const instruction = document.getElementById('calib-instruction');
+        const phasePill = document.getElementById('calib-phase-pill');
+        const errorBanner = document.getElementById('calib-error-banner');
+
+        if (tel.calib_error) {
+          errorBanner.classList.remove('hidden');
+          document.getElementById('calib-error-text').textContent = tel.calib_error;
+        } else {
+          errorBanner.classList.add('hidden');
+        }
+
+        if (tel.calib_phase === 'DONE') {
+          overlay.classList.add('hidden');
+        } else {
+          overlay.classList.remove('hidden');
+
+          if (tel.calib_phase === 'SETUP') {
+            setupCard.classList.remove('hidden');
+            targetDot.classList.add('hidden');
+            instruction.classList.add('hidden');
+            overlay.className = 'fixed inset-0 z-[2000] flex flex-col items-center justify-center transition-colors duration-700 bg-slate-900/60 backdrop-blur-md';
+          } else {
+            setupCard.classList.add('hidden');
+            targetDot.classList.remove('hidden');
+            instruction.classList.remove('hidden');
+
+            const isDark = tel.calib_phase === 'CALIBRATING_DARK';
+            overlay.className = isDark 
+              ? 'fixed inset-0 z-[2000] flex flex-col items-center justify-center transition-colors duration-700 bg-black text-white' 
+              : 'fixed inset-0 z-[2000] flex flex-col items-center justify-center transition-colors duration-700 bg-white text-slate-900';
+
+            // Move the calibration dot
+            targetDot.style.top = tel.calib_top || '50%';
+            targetDot.style.left = tel.calib_left || '50%';
+
+            // Update text at bottom (e.g. 4. LOOK BOTTOM RIGHT (Phase: Light Mode))
+            instruction.childNodes[0].nodeValue = (tel.calib_label || 'LOOK AT TARGET') + ' ';
+            phasePill.textContent = `(Phase: ${isDark ? 'Dark Mode' : 'Light Mode'})`;
+          }
+        }
+
+        // Quadrant highlight on dashboard when calibrated
+        if (currentRoute === '/dashboard' && tel.calib_phase === 'DONE') {
+          let q = 0;
+          if (tel.screen_x >= 0.5 && tel.screen_y < 0.5) q = 1;
+          else if (tel.screen_x < 0.5 && tel.screen_y >= 0.5) q = 2;
+          else if (tel.screen_x >= 0.5 && tel.screen_y >= 0.5) q = 3;
+
+          for (let i = 0; i < 4; i++) {
+            const el = document.getElementById(`card-${i}`);
+            if (el) {
+              if (i === q) {
+                el.classList.add('ring-4', 'ring-emerald-400', 'scale-[1.02]');
+              } else {
+                el.classList.remove('ring-4', 'ring-emerald-400', 'scale-[1.02]');
+              }
+            }
+          }
+        }
+      } catch (e) {}
+    }, 200);
+  </script>
+</body>
+</html>
